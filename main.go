@@ -13,11 +13,30 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+type token string
+
 const (
-	authorizedToken = "FQiUnkxCTnVTMTzMzpC6"
-	upstream        = "https://47.102.63.109:6443"
-	remoteUser      = "229736241737041599"
+	upstream   = "https://47.102.63.109:6443"
+	remoteUser = "229736241737041599"
 )
+
+var authorizedToken = token("FQiUnkxCTnVTMTzMzpC6")
+
+func (t *token) VerifyToken() bool {
+	if *t == authorizedToken {
+		return true
+	}
+	return false
+}
+
+func newTokenFromHeader(header string) *token {
+	t := token(header)
+	return &t
+}
+
+func (t *token) GetUser() string {
+	return remoteUser
+}
 
 func main() {
 	fmt.Println("Starting server on 127.0.0.1:8001")
@@ -61,8 +80,8 @@ func main() {
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if len(auth) == 0 || string(auth) != "Bearer "+authorizedToken {
+		auth := newTokenFromHeader(r.Header.Get("Authorization"))
+		if auth.VerifyToken() {
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprintf(w, "Unauthorized")
 			log.Info().Str("from", r.RemoteAddr).Interface("authorization", auth).Msg("Unauthorized request")
@@ -74,7 +93,7 @@ func main() {
 		if err != nil {
 			log.Error().Err(err).Msg("Error constructing request")
 		}
-		nr.Header.Add("X-Remote-User", remoteUser)
+		nr.Header.Add("X-Remote-User", auth.GetUser())
 		resp, err := c.Do(nr)
 		if err != nil {
 			log.Error().Err(err).Msg("Error requesting upstream")
